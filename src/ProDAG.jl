@@ -251,7 +251,6 @@ function train_linear!(x, μ, cont_σ, cont_α, prior_μ, prior_σ, prior_α, pa
 
         # Rescale variational parameters
         σ = Flux.softplus(cont_σ)
-        # σ = abs.(cont_σ)
 
         # Compute KL divergence
         kl = sum(kl_norm.(μ, σ, prior_μ, prior_σ))
@@ -305,7 +304,7 @@ end
 
 # Function to train multilayer perceptron model
 function train_mlp!(x, construct, μ, cont_σ, cont_α, prior_μ, prior_σ, prior_α, params, epoch_max, 
-    patience, optimiser, optimiser_args, n_sample, dirac_λ, verbose, output_ind, input_ind, 
+    patience, optimiser, optimiser_args, n_sample, dirac_λ, verbose, non_fhl_ind, fhl_ind, 
     ind_order, ind_mat)
 
     # Instantiate optimiser and collect variational parameters
@@ -339,13 +338,13 @@ function train_mlp!(x, construct, μ, cont_σ, cont_α, prior_μ, prior_σ, prio
         # Sample weighted adjacency matrices
         ε = CUDA.randn(size(μ)..., n_sample)
         ῶ = μ .+ σ .* ε
-        ῶ_hidden = ῶ[input_ind, :]
-        ω_output = ῶ[output_ind, :]
-        w̃ = reshape(sqrt.(ind_mat * ῶ_hidden .^ 2), p, p, n_sample)
+        ῶ_fhl = ῶ[fhl_ind, :]
+        ω_non_fhl = ῶ[non_fhl_ind, :]
+        w̃ = reshape(sqrt.(ind_mat * ῶ_fhl .^ 2), p, p, n_sample)
         w = project(w̃, λ, params = params)
         scale_factor = transpose(ind_mat) * reshape(w ./ w̃, p * p, n_sample)
-        ω_hidden = ῶ_hidden .* scale_factor
-        ω = vcat(ω_hidden, ω_output)[ind_order, :]
+        ω_fhl = ῶ_fhl .* scale_factor
+        ω = vcat(ω_fhl, ω_non_fhl)[ind_order, :]
 
         # Compute expected log-likelihood
         ell = 0
@@ -387,38 +386,40 @@ end
 # Functions to create multilayer perceptron network
 #==================================================================================================#
 
-function create_mlp(n_neuron, p, activation_fun)
+function create_mlp(hidden_layers, p, activation_fun, bias)
+
+    layers = [p, hidden_layers..., 1]
 
     # Create a neural network for each variable
     subnetwork = Vector{Flux.Chain}(undef, p)
     for j in 1:p
-        subnetwork[j] = Flux.Chain(
-            Flux.Dense(p, n_neuron, activation_fun, bias = false), 
-            Flux.Dense(n_neuron, 1, bias = false)
-            )
+        subnetwork[j] = Flux.Chain([Flux.Dense(layers[i], layers[i + 1], 
+            i + 1 == length(layers) ? Flux.identity : activation_fun, bias = bias) 
+            for i in 1:length(layers) - 1]...)
     end
-
+    
     # Concatenate individual neural networks
     model = Flux.Parallel(vcat, subnetwork...)
-
+    
     # Destructure the network so we can construct it later using sampled parameters
-    _, construct = Flux.destructure(model)
-
-    # Create an indicator matrix
-    ind = repeat(1:p ^ 2, inner = n_neuron)
-    ind_mat = zeros(p ^ 2, p ^ 2 * n_neuron)
-    for j in 1:p ^ 2 * n_neuron
+    parameters, construct = Flux.destructure(model)
+    
+    # Create indicator matrix
+    ind = repeat(1:p ^ 2, inner = hidden_layers[1])
+    ind_mat = zeros(p ^ 2, p ^ 2 * hidden_layers[1])
+    for j in 1:p ^ 2 * hidden_layers[1]
         ind_mat[ind[j], j] = 1
     end
-
+    
     # Create indexes
-    n_hidden = p * n_neuron
-    n_total = p * n_neuron + n_neuron
-    output_ind = vcat([n_hidden + 1 + (j - 1) * n_total:n_total + (j - 1) * n_total for j in 1:p]...)
-    input_ind = setdiff(1:p ^ 2 * n_neuron + p * n_neuron, output_ind)
-    ind_order = sortperm(vcat(input_ind, output_ind))
+    n_fhl_weights = p * hidden_layers[1]
+    n_total_weights = Int(length(parameters) / p)
+    non_fhl_ind = vcat([n_fhl_weights + 1 + (j - 1) * n_total_weights:n_total_weights + 
+        (j - 1) * n_total_weights for j in 1:p]...)
+    fhl_ind = setdiff(1:p * n_total_weights, non_fhl_ind)
+    ind_order = sortperm(vcat(fhl_ind, non_fhl_ind))
 
-    construct, output_ind, input_ind, ind_order, ind_mat
+    construct, non_fhl_ind, fhl_ind, ind_order, ind_mat
 
 end
 
@@ -443,8 +444,8 @@ struct ProDAGMLPFit
     dirac_λ::Bool # Prior on λ is Dirac or exponential
     p::Int # Number of nodes
     construct::Optimisers.Restructure # Function to construct neural network from weights
-    output_ind::Vector{<:Real} # Indexes of the output layer weights
-    input_ind::Vector{<:Real} # Indexes of the input layer weights
+    non_fhl_ind::Vector{<:Real} # Indexes of the output layer weights
+    fhl_ind::Vector{<:Real} # Indexes of the input layer weights
     ind_order::Vector{<:Real} # Inverts the above
     ind_mat::Matrix{<:Real} # For computing the 2-norms of the input layer weights
 end
@@ -506,7 +507,6 @@ function fit_linear(x; prior_μ = 0.0, prior_σ = 1.0, prior_α = Inf, init_μ =
     σ = deepcopy(init_σ) .* ones(n_weights)
     α = deepcopy(init_α) .* ones(1)
     cont_σ = log.(exp.(σ) .- 1)
-    # cont_σ = σ
     cont_α = log.(exp.(α) .- 1)
 
     # Move data and parameters to GPU
@@ -541,8 +541,10 @@ Performs a Bayesian fit of a nonlinear (multilayer perceptron) DAG to variables 
 projection-induced distributions.
 
 # Arguments
-- `n_neuron = 10`: the number of neurons to use in the hidden layer of the MLP.
-- `activation_fun = Flux.relu`: the activation function to use in the hidden layer of the MLP.
+- `hidden_layers = [10]`: the hidden layers of the MLP; by default produces a network with one \
+hidden layer containing 10 neurons .
+- `activation_fun = Flux.relu`: the activation function to use in the hidden layers of the MLP.
+- `bias = true`: whether to include a bias term in each neuron of the MLP.
 - `prior_μ = 0.0`: the prior mean of w̃; can be a scalar or a `size(x, 2) ^ 2` vector.
 - `prior_σ = 1.0`: the prior standard deviation of w̃; can be a scalar or a `size(x, 2) ^ 2` vector.
 - `prior_α = Inf`: the prior mean of λ.
@@ -568,7 +570,7 @@ thresholding parameter `threshold`, learning rate `lr`.
 
 See also [`sample`](@ref).
 """
-function fit_mlp(x; n_neuron = 10, activation_fun = Flux.relu, prior_μ = 0.0, 
+function fit_mlp(x; hidden_layers = [10], activation_fun = Flux.relu, bias = true, prior_μ = 0.0, 
     prior_σ = 1, prior_α = Inf, init_μ = prior_μ, init_σ = prior_σ, init_α = prior_α, 
     dirac_λ = true, epoch_max = 1000, patience = 5, optimiser = Flux.Adam, 
     optimiser_args = (0.1), params = (1, 1, 0.5, 1e-2, 10, 10000, 0.1, 0.25 / size(x, 2)), 
@@ -578,10 +580,11 @@ function fit_mlp(x; n_neuron = 10, activation_fun = Flux.relu, prior_μ = 0.0,
     p = size(x, 2)
 
     # Construct neural network
-    construct, output_ind, input_ind, ind_order, ind_mat = create_mlp(n_neuron, p, activation_fun)
+    construct, non_fhl_ind, fhl_ind, ind_order, ind_mat = create_mlp(hidden_layers, p, 
+        activation_fun, bias)
 
     # Save number of parameters
-    n_weights = p ^ 2 * n_neuron + p * n_neuron
+    n_weights = length(ind_order)
 
     # Create priors
     prior_μ = prior_μ .* ones(n_weights)
@@ -608,7 +611,7 @@ function fit_mlp(x; n_neuron = 10, activation_fun = Flux.relu, prior_μ = 0.0,
 
     # Train the variational posterior
     train_mlp!(x, construct, μ, cont_σ, cont_α, prior_μ, prior_σ, prior_α, params, epoch_max, 
-        patience, optimiser, optimiser_args, n_sample, dirac_λ, verbose, output_ind, input_ind, 
+        patience, optimiser, optimiser_args, n_sample, dirac_λ, verbose, non_fhl_ind, fhl_ind, 
         ind_order, ind_mat)
 
     # Move parameters to CPU
@@ -619,7 +622,7 @@ function fit_mlp(x; n_neuron = 10, activation_fun = Flux.relu, prior_μ = 0.0,
     α = Flux.softplus(cont_α)
     ind_mat = Flux.cpu(ind_mat)
 
-    ProDAGMLPFit(μ, σ, α, dirac_λ, p, construct, output_ind, input_ind, ind_order, ind_mat)
+    ProDAGMLPFit(μ, σ, α, dirac_λ, p, construct, non_fhl_ind, fhl_ind, ind_order, ind_mat)
 
 end
 
@@ -707,9 +710,9 @@ function sample(fit::ProDAGMLPFit; n_sample = 1000, guarantee_dag = true,
     # Sample weighted adjacency matrices
     ε = CUDA.randn(size(μ)..., n_sample)
     ῶ = μ .+ σ .* ε
-    ῶ_hidden = ῶ[fit.input_ind, :]
-    ω_output = ῶ[fit.output_ind, :]
-    w̃ = reshape(sqrt.(ind_mat * ῶ_hidden .^ 2), fit.p, fit.p, n_sample)
+    ῶ_fhl = ῶ[fit.fhl_ind, :]
+    ω_non_fhl = ῶ[fit.non_fhl_ind, :]
+    w̃ = reshape(sqrt.(ind_mat * ῶ_fhl .^ 2), fit.p, fit.p, n_sample)
     w = project(w̃, λ, params = params)
 
     # Guarantee output is a DAG
@@ -720,8 +723,8 @@ function sample(fit::ProDAGMLPFit; n_sample = 1000, guarantee_dag = true,
     end
 
     scale_factor = transpose(ind_mat) * reshape(w ./ w̃, fit.p * fit.p, n_sample)
-    ω_hidden = ῶ_hidden .* scale_factor
-    ω = vcat(ω_hidden, ω_output)[fit.ind_order, :]
+    ω_fhl = ῶ_fhl .* scale_factor
+    ω = vcat(ω_fhl, ω_non_fhl)[fit.ind_order, :]
 
     # Move weighted adjacency matrices to CPU
     w = Flux.cpu(w)

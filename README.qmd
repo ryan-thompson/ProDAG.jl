@@ -23,8 +23,9 @@ The `fit_linear()` function learns the posterior over linear DAGs given data `x`
 function draws DAGs from the learned posterior.
 
 ```{julia}
-using ProDAG, Random
+using ProDAG, CUDA, Random
 
+CUDA.seed!(1)
 Random.seed!(1)
 
 # Generate some data
@@ -32,7 +33,7 @@ n = 100
 p = 5
 x = randn(n, p)
 
-# Fit a posterior over linear DAGs with a N(0,1) prior on each weight
+# Fit a posterior with a N(0,1) prior on each weight
 fit = fit_linear(x, prior_μ = 0, prior_σ = 1, verbose = false)
 
 # Draw a sample of DAGs from the posterior
@@ -43,8 +44,8 @@ w = sample(fit, n_sample = 3)
 To learn a posterior over nonlinear DAGs in the form of acyclic multilayer perceptrons (MLPs), use the `fit_mlp()` function.
 
 ```{julia}
-# Fit a posterior over nonlinear DAGs with a N(0,1) prior on each weight
-fit = fit_mlp(x, prior_μ = 0, prior_σ = 1, verbose = false)
+# Fit a posterior with a single hidden-layer of 10 neurons and a N(0,1) prior on each weight
+fit = fit_mlp(x, hidden_layers = [10], bias = false, prior_μ = 0, prior_σ = 1, verbose = false)
 
 # Draw a sample of DAGs from the posterior
 w, model = sample(fit, n_sample = 3)

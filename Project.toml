@@ -1,7 +1,7 @@
 name = "ProDAG"
 uuid = "40085711-b28f-42ee-a52f-4997449bf79a"
 authors = ["Ryan Thompson <ryan.thompson1@unsw.edu.au>"]
-version = "0.1.0"
+version = "0.2.0"
 
 [deps]
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
