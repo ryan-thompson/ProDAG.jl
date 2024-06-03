@@ -233,8 +233,8 @@ Zygote.@adjoint CUDA.rand(args...) = CUDA.rand(args...), Δ -> (nothing,)
 Zygote.@adjoint CUDA.randn(args...) = CUDA.randn(args...), Δ -> (nothing,)
 
 # Function to train linear model
-function train_linear!(x, μ, cont_σ, cont_α, prior_μ, prior_σ, prior_α, params, epoch_max, patience, 
-    optimiser, optimiser_args, n_sample, dirac_λ, verbose)
+function train_linear!(x, μ, cont_σ, cont_α, prior_μ, prior_σ, prior_α, dirac_λ, noise_var, 
+    epoch_max, patience, optimiser, optimiser_args, params, n_sample, verbose)
 
     # Instantiate optimiser and collect variational parameters
     optim = optimiser(optimiser_args...)
@@ -273,7 +273,8 @@ function train_linear!(x, μ, cont_σ, cont_α, prior_μ, prior_σ, prior_α, pa
 
         # Compute expected log-likelihood
         x̂ = xw_mult(w; x = x)
-        ell = - 0.5 * sum((x̂ .- x) .^ 2) / n_sample - 0.5 * n * p * log(2 * pi)
+        ell = - 0.5 * sum((x̂ .- x) .^ 2 ./ transpose(noise_var)) / n_sample - 
+            0.5 * n * p * log(2 * pi) - 0.5 * n * sum(log.(noise_var))
 
         # Compute negative ELBO
         (- ell + kl) / n
@@ -303,9 +304,9 @@ function train_linear!(x, μ, cont_σ, cont_α, prior_μ, prior_σ, prior_α, pa
 end
 
 # Function to train multilayer perceptron model
-function train_mlp!(x, construct, μ, cont_σ, cont_α, prior_μ, prior_σ, prior_α, params, epoch_max, 
-    patience, optimiser, optimiser_args, n_sample, dirac_λ, verbose, non_fhl_ind, fhl_ind, 
-    ind_order, ind_mat)
+function train_mlp!(x, construct, μ, cont_σ, cont_α, prior_μ, prior_σ, prior_α, dirac_λ, noise_var, 
+    epoch_max, patience, optimiser, optimiser_args, params, n_sample, verbose, non_fhl_ind, 
+    fhl_ind, ind_order, ind_mat)
 
     # Instantiate optimiser and collect variational parameters
     optim = optimiser(optimiser_args...)
@@ -351,9 +352,9 @@ function train_mlp!(x, construct, μ, cont_σ, cont_α, prior_μ, prior_σ, prio
         for i in 1:n_sample
             model_i = construct(ω[:, i])
             x̂ = model_i(x)
-            ell -= 0.5 * sum((x̂ .- x) .^ 2) / n_sample 
+            ell -= 0.5 * sum((x̂ .- x) .^ 2 ./ noise_var) / n_sample 
         end
-        ell -= 0.5 * n * p * log(2 * pi)
+        ell -= 0.5 * n * p * log(2 * pi) - 0.5 * n * sum(log.(noise_var))
 
         # Compute negative ELBO
         (- ell + kl) / n
@@ -374,8 +375,8 @@ function train_mlp!(x, construct, μ, cont_σ, cont_α, prior_μ, prior_σ, prio
 
         # Print status update
         if verbose
-            # Printf.@printf("\33[2K\rEpoch: %i, Neg. ELBO: %.4f", epoch, neg_elbo)
-            Printf.@printf("Epoch: %i, Neg. ELBO: %.4f \n", epoch, neg_elbo)
+            Printf.@printf("\33[2K\rEpoch: %i, Neg. ELBO: %.4f", epoch, neg_elbo)
+            # Printf.@printf("Epoch: %i, Neg. ELBO: %.4f \n", epoch, neg_elbo)
         end
 
     end
@@ -472,6 +473,7 @@ or a `size(x, 2) ^ 2` vector.
 `size(x, 2) ^ 2` vector.
 - `dirac_λ = true`: if `true`, λ is modeled as a Dirac delta distribution centred on `prior_α`, \
 otherwise if `false`, λ is modeled as an exponential distribution with mean `prior_α`
+- `noise_var = ones(size(x, 2))` the variance of the noise term for each variable.
 - `epoch_max = 1000`: the maximum number of training epochs.
 - `patience = 5`: the number of epochs to wait before declaring convergence.
 - `optimiser = Flux.Adam`: an optimiser from Flux to use for training.
@@ -487,8 +489,8 @@ thresholding parameter `threshold`, learning rate `lr`.
 See also [`sample`](@ref).
 """
 function fit_linear(x; prior_μ = 0.0, prior_σ = 1.0, prior_α = Inf, init_μ = prior_μ, 
-    init_σ = prior_σ, init_α = prior_α, dirac_λ = true, epoch_max = 1000, patience = 5, 
-    optimiser = Flux.Adam, optimiser_args = (0.1), 
+    init_σ = prior_σ, init_α = prior_α, dirac_λ = true, noise_var = ones(size(x, 2)), 
+    epoch_max = 1000, patience = 5, optimiser = Flux.Adam, optimiser_args = (0.1), 
     params = (1, 1, 0.5, 1e-2, 10, 10000, 0.1, 1 / size(x, 2)), n_sample = 1000, verbose = true)
 
     # Save data dimension
@@ -517,10 +519,11 @@ function fit_linear(x; prior_μ = 0.0, prior_σ = 1.0, prior_α = Inf, init_μ =
     μ = Flux.gpu(μ)
     cont_σ = Flux.gpu(cont_σ)
     cont_α = Flux.gpu(cont_α)
+    noise_var = Flux.gpu(noise_var)
 
     # Train the variational posterior
-    train_linear!(x, μ, cont_σ, cont_α, prior_μ, prior_σ, prior_α, params, epoch_max, patience, 
-        optimiser, optimiser_args, n_sample, dirac_λ, verbose)
+    train_linear!(x, μ, cont_σ, cont_α, prior_μ, prior_σ, prior_α, dirac_λ, noise_var, epoch_max, 
+        patience, optimiser, optimiser_args, params, n_sample, verbose)
 
     # Move parameters to CPU
     μ = Flux.cpu(μ)
@@ -556,6 +559,7 @@ or a `size(x, 2) ^ 2` vector.
 `size(x, 2) ^ 2` vector.
 - `dirac_λ = true`: if `true`, λ is modeled as a Dirac delta distribution centred on `prior_α`, \
 otherwise if `false`, λ is modeled as an exponential distribution with mean `prior_α`
+- `noise_var = ones(size(x, 2))` the variance of the noise term for each variable.
 - `epoch_max = 1000`: the maximum number of training epochs.
 - `patience = 5`: the number of epochs to wait before declaring convergence.
 - `optimiser = Flux.Adam`: an optimiser from Flux to use for training.
@@ -572,9 +576,9 @@ See also [`sample`](@ref).
 """
 function fit_mlp(x; hidden_layers = [10], activation_fun = Flux.relu, bias = true, prior_μ = 0.0, 
     prior_σ = 1, prior_α = Inf, init_μ = prior_μ, init_σ = prior_σ, init_α = prior_α, 
-    dirac_λ = true, epoch_max = 1000, patience = 5, optimiser = Flux.Adam, 
-    optimiser_args = (0.1), params = (1, 1, 0.5, 1e-2, 10, 10000, 0.1, 0.25 / size(x, 2)), 
-    n_sample = 1000, verbose = true)
+    dirac_λ = true, noise_var = ones(size(x, 2)), epoch_max = 1000, patience = 5, 
+    optimiser = Flux.Adam, optimiser_args = (0.1), 
+    params = (1, 1, 0.5, 1e-2, 10, 10000, 0.1, 0.25 / size(x, 2)), n_sample = 1000, verbose = true)
 
     # Save data dimension
     p = size(x, 2)
@@ -607,12 +611,13 @@ function fit_mlp(x; hidden_layers = [10], activation_fun = Flux.relu, bias = tru
     μ = Flux.gpu(μ)
     cont_σ = Flux.gpu(cont_σ)
     cont_α = Flux.gpu(cont_α)
+    noise_var = Flux.gpu(noise_var)
     ind_mat = Flux.gpu(ind_mat)
 
     # Train the variational posterior
-    train_mlp!(x, construct, μ, cont_σ, cont_α, prior_μ, prior_σ, prior_α, params, epoch_max, 
-        patience, optimiser, optimiser_args, n_sample, dirac_λ, verbose, non_fhl_ind, fhl_ind, 
-        ind_order, ind_mat)
+    train_mlp!(x, construct, μ, cont_σ, cont_α, prior_μ, prior_σ, prior_α, dirac_λ, noise_var, 
+        epoch_max, patience, optimiser, optimiser_args, params, n_sample, verbose, non_fhl_ind, 
+        fhl_ind, ind_order, ind_mat)
 
     # Move parameters to CPU
     μ = Flux.cpu(μ)

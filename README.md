@@ -64,6 +64,9 @@ To learn a posterior over nonlinear DAGs in the form of acyclic
 multilayer perceptrons (MLPs), use the `fit_mlp()` function.
 
 ``` julia
+CUDA.seed!(1)
+Random.seed!(1)
+
 # Fit a posterior with a single hidden-layer of 10 neurons and a N(0,1) prior on each weight
 fit = fit_mlp(x, hidden_layers = [10], bias = false, prior_μ = 0, prior_σ = 1, verbose = false)
 
@@ -76,8 +79,8 @@ x̂ = model[1](x_new')'
 ```
 
     5×5 adjoint(::Matrix{Float32}) with eltype Float32:
-      0.318743   0.0917939  -0.0949442  0.175503   0.0
-      0.106376   0.323048   -0.0779142  0.0340147  0.0
-      0.0603596  0.41787    -0.49383    0.0834968  0.0
-      0.361308   0.139777   -0.137487   0.198836   0.0
-     -0.0266388  0.151392    0.150791   0.0888996  0.0
+      0.737726      0.174007  -0.149519   0.164915  0.0
+     -0.197016     -0.10658    0.0728614  0.104097  0.0
+      0.72916       0.122759  -0.105185   0.16743   0.0
+      0.701111      0.215224  -0.166327   0.277106  0.0
+     -0.000798782   0.043071  -0.227916   0.27824   0.0

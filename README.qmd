@@ -44,6 +44,9 @@ w = sample(fit, n_sample = 3)
 To learn a posterior over nonlinear DAGs in the form of acyclic multilayer perceptrons (MLPs), use the `fit_mlp()` function.
 
 ```{julia}
+CUDA.seed!(1)
+Random.seed!(1)
+
 # Fit a posterior with a single hidden-layer of 10 neurons and a N(0,1) prior on each weight
 fit = fit_mlp(x, hidden_layers = [10], bias = false, prior_μ = 0, prior_σ = 1, verbose = false)
 
