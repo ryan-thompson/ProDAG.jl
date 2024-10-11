@@ -295,8 +295,8 @@ function train_linear!(x, μ, cont_σ, cont_α, prior_μ, prior_σ, prior_α, di
 
         # Print status update
         if verbose
-            # Printf.@printf("\33[2K\rEpoch: %i, Neg. ELBO: %.4f", epoch, neg_elbo)
-            Printf.@printf("Epoch: %i, Neg. ELBO: %.4f \n", epoch, neg_elbo)
+            Printf.@printf("\33[2K\rEpoch: %i, Neg. ELBO: %.4f", epoch, neg_elbo)
+            # Printf.@printf("Epoch: %i, Neg. ELBO: %.4f \n", epoch, neg_elbo)
         end
 
     end
@@ -491,7 +491,7 @@ See also [`sample`](@ref).
 function fit_linear(x; prior_μ = 0.0, prior_σ = 1.0, prior_α = Inf, init_μ = prior_μ, 
     init_σ = prior_σ, init_α = prior_α, dirac_λ = true, noise_var = ones(size(x, 2)), 
     epoch_max = 1000, patience = 5, optimiser = Flux.Adam, optimiser_args = (0.1), 
-    params = (1, 1, 0.5, 1e-2, 10, 10000, 0.1, 1 / size(x, 2)), n_sample = 1000, verbose = true)
+    params = (1, 1, 0.5, 1e-2, 10, 10000, 0.1, 1 / size(x, 2)), n_sample = 100, verbose = true)
 
     # Save data dimension
     p = size(x, 2)
@@ -575,10 +575,10 @@ thresholding parameter `threshold`, learning rate `lr`.
 See also [`sample`](@ref).
 """
 function fit_mlp(x; hidden_layers = [10], activation_fun = Flux.relu, bias = true, prior_μ = 0.0, 
-    prior_σ = 1, prior_α = Inf, init_μ = prior_μ, init_σ = prior_σ, init_α = prior_α, 
+    prior_σ = 1.0, prior_α = Inf, init_μ = prior_μ, init_σ = prior_σ, init_α = prior_α, 
     dirac_λ = true, noise_var = ones(size(x, 2)), epoch_max = 1000, patience = 5, 
     optimiser = Flux.Adam, optimiser_args = (0.1), 
-    params = (1, 1, 0.5, 1e-2, 10, 10000, 0.1, 0.25 / size(x, 2)), n_sample = 1000, verbose = true)
+    params = (1, 1, 0.5, 1e-2, 10, 10000, 0.1, 0.25 / size(x, 2)), n_sample = 100, verbose = true)
 
     # Save data dimension
     p = size(x, 2)
@@ -661,7 +661,7 @@ Samples DAGs from a fitted Bayesian posterior distribution.
 - `gurantee_dag = true`: whether to threshold the adjacency matrix to guarantee that all cycles \
 are removed.
 """
-function sample(fit::ProDAGLinearFit; n_sample = 1000, guarantee_dag = true, 
+function sample(fit::ProDAGLinearFit; n_sample = 100, guarantee_dag = true, 
     params = (1, 1, 0.5, 1e-4, 10, 10000, 0.1, 1 / fit.p))
     
     # Move variational parameters to GPU
@@ -696,7 +696,7 @@ function sample(fit::ProDAGLinearFit; n_sample = 1000, guarantee_dag = true,
 end
 
 # Function to sample from fitted multilayer perceptron model
-function sample(fit::ProDAGMLPFit; n_sample = 1000, guarantee_dag = true, 
+function sample(fit::ProDAGMLPFit; n_sample = 100, guarantee_dag = true, 
     params = (1, 1, 0.5, 1e-4, 10, 10000, 0.1, 0.25 / fit.p))
 
     # Move variational parameters to GPU

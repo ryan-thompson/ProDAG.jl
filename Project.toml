@@ -1,7 +1,7 @@
 name = "ProDAG"
 uuid = "40085711-b28f-42ee-a52f-4997449bf79a"
-authors = ["Ryan Thompson <ryan.thompson1@unsw.edu.au>"]
-version = "0.2.0"
+authors = ["Ryan Thompson <ryan.thompson-1@uts.edu.au>"]
+version = "0.2.1"
 
 [deps]
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
@@ -11,4 +11,3 @@ LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Optimisers = "3bd65402-5787-11e9-1adc-39752487f4e2"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
-cuDNN = "02a925ec-e4fe-4b08-9a7e-0d78e3d38ccd"
