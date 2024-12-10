@@ -482,7 +482,7 @@ otherwise if `false`, λ is modeled as an exponential distribution with mean `pr
 projection in the following order: log det parameter `s`, path coefficient `μ`, decay factor `c`, \
 convergence tolerance `tol`, step count `T`, maximum gradient descent iterations `max_iter`, \
 thresholding parameter `threshold`, learning rate `lr`.
-- `n_sample = 1000`: the number of samples of `w` to draw when estimating the objective function.
+- `n_sample = 100`: the number of samples of `w` to draw when estimating the objective function.
 - `verbose = true`: whether to print status updates during training.
 ``
 
@@ -568,7 +568,7 @@ otherwise if `false`, λ is modeled as an exponential distribution with mean `pr
 projection in the following order: log det parameter `s`, path coefficient `μ`, decay factor `c`, \
 convergence tolerance `tol`, step count `T`, maximum gradient descent iterations `max_iter`, \
 thresholding parameter `threshold`, learning rate `lr`.
-- `n_sample = 1000`: the number of samples of `w` to draw when estimating the objective function.
+- `n_sample = 100`: the number of samples of `w` to draw when estimating the objective function.
 - `verbose = true`: whether to print status updates during training.
 ``
 
@@ -657,7 +657,7 @@ fit_mlp(fit; <keyword arguments>)
 Samples DAGs from a fitted Bayesian posterior distribution.
 
 # Arguments
-- `n_sample = 1000`: the number of samples of `w` to draw when estimating the objective function.
+- `n_sample = 100`: the number of samples of `w` to draw when estimating the objective function.
 - `gurantee_dag = true`: whether to threshold the adjacency matrix to guarantee that all cycles \
 are removed.
 """
