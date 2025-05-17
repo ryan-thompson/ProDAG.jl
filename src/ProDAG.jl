@@ -70,13 +70,13 @@ function Zygote.rrule(::typeof(xw_mult), w; x = x)
 end
 
 #==================================================================================================#
-# Function to project weighted adjancency matrix onto set of DAGs
+# Function to project weighted adjacency matrix onto set of DAGs
 #==================================================================================================#
 
 function project_dag(w̃, params)
 
     # Save params
-    s, mu, alpha, tol, max_step, max_iter, threshold, lr = params
+    s, mu, c, tol, max_step, max_iter, threshold, lr = params
 
     # Compute scaling constant
     max_ = maximum(abs.(w̃), dims = (1, 2))
@@ -116,7 +116,7 @@ function project_dag(w̃, params)
         end
 
         # Update mu
-        mu *= alpha
+        mu *= c
 
     end
 
@@ -132,7 +132,7 @@ function project_dag(w̃, params)
 end
 
 #==================================================================================================#
-# Function to project weighted adjancency matrix onto ℓ1-ball
+# Function to project weighted adjacency matrix onto ℓ1-ball
 #==================================================================================================#
 
 function project_l1(w, λ)
@@ -166,7 +166,7 @@ function project_l1(w, λ)
 end
 
 #==================================================================================================#
-# Function to project weighted adjancency matrix onto intersection of sets
+# Function to project weighted adjacency matrix onto intersection of sets
 #==================================================================================================#
 
 function project(w̃, λ; params)
@@ -218,7 +218,7 @@ function kl_norm(μ_q, σ_q, μ_p, σ_p)
     log(σ_p / σ_q) + (σ_q ^ 2 + (μ_q - μ_p) ^ 2) / (2 * σ_p ^ 2) - 0.5
 end
 
-# KL divergence between exponential distributions (parameterized by mean α)
+# KL divergence between exponential distributions (parameterised by mean α)
 function kl_exp(α_q, α_p)
     log(α_p / α_q) + α_q / α_p - 1
 end
@@ -412,7 +412,7 @@ function create_mlp(hidden_layers, p, activation_fun, bias)
         ind_mat[ind[j], j] = 1
     end
     
-    # Create indexes
+    # Create indices
     n_fhl_weights = p * hidden_layers[1]
     n_total_weights = Int(length(parameters) / p)
     non_fhl_ind = vcat([n_fhl_weights + 1 + (j - 1) * n_total_weights:n_total_weights + 
@@ -445,8 +445,8 @@ struct ProDAGMLPFit
     dirac_λ::Bool # Prior on λ is Dirac or exponential
     p::Int # Number of nodes
     construct::Optimisers.Restructure # Function to construct neural network from weights
-    non_fhl_ind::Vector{<:Real} # Indexes of the output layer weights
-    fhl_ind::Vector{<:Real} # Indexes of the input layer weights
+    non_fhl_ind::Vector{<:Real} # Indices of the output layer weights
+    fhl_ind::Vector{<:Real} # Indices of the input layer weights
     ind_order::Vector{<:Real} # Inverts the above
     ind_mat::Matrix{<:Real} # For computing the 2-norms of the input layer weights
 end
@@ -459,7 +459,7 @@ end
 """
 fit_linear(x; <keyword arguments>)
 
-Performs a Bayesian fit of a linear  DAG to variables `x` using projection-induced distributions.
+Performs a Bayesian fit of a linear DAG to variables `x` using projection-induced distributions.
 
 # Arguments
 - `prior_μ = 0.0`: the prior mean of w̃; can be a scalar or a `size(x, 2) ^ 2` vector.
@@ -484,7 +484,6 @@ convergence tolerance `tol`, step count `T`, maximum gradient descent iterations
 thresholding parameter `threshold`, learning rate `lr`.
 - `n_sample = 100`: the number of samples of `w` to draw when estimating the objective function.
 - `verbose = true`: whether to print status updates during training.
-``
 
 See also [`sample`](@ref).
 """
@@ -545,7 +544,7 @@ projection-induced distributions.
 
 # Arguments
 - `hidden_layers = [10]`: the hidden layers of the MLP; by default produces a network with one \
-hidden layer containing 10 neurons .
+hidden layer containing 10 neurons.
 - `activation_fun = Flux.relu`: the activation function to use in the hidden layers of the MLP.
 - `bias = true`: whether to include a bias term in each neuron of the MLP.
 - `prior_μ = 0.0`: the prior mean of w̃; can be a scalar or a `size(x, 2) ^ 2` vector.
@@ -570,7 +569,6 @@ convergence tolerance `tol`, step count `T`, maximum gradient descent iterations
 thresholding parameter `threshold`, learning rate `lr`.
 - `n_sample = 100`: the number of samples of `w` to draw when estimating the objective function.
 - `verbose = true`: whether to print status updates during training.
-``
 
 See also [`sample`](@ref).
 """
@@ -652,13 +650,13 @@ end
 
 # Function to sample from fitted linear model
 """
-fit_mlp(fit; <keyword arguments>)
+sample(fit; <keyword arguments>)
 
 Samples DAGs from a fitted Bayesian posterior distribution.
 
 # Arguments
 - `n_sample = 100`: the number of samples of `w` to draw when estimating the objective function.
-- `gurantee_dag = true`: whether to threshold the adjacency matrix to guarantee that all cycles \
+- `guarantee_dag = true`: whether to threshold the adjacency matrix to guarantee that all cycles \
 are removed.
 """
 function sample(fit::ProDAGLinearFit; n_sample = 100, guarantee_dag = true, 
