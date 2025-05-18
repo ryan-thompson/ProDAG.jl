@@ -3,7 +3,7 @@
 # ProDAG
 
 Julia implementation of ProDAG from the paper [“ProDAG:
-Projection-induced variational inference for directed acyclic
+Projected variational inference for directed acyclic
 graphs”](https://arxiv.org/abs/2405.15167).
 
 ## Installation
