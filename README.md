@@ -2,7 +2,7 @@
 
 # ProDAG
 
-Julia implementation of ProDAG from the paper [“ProDAG:
+Julia implementation of ProDAG from the NeurIPS 2025 paper [“ProDAG:
 Projected variational inference for directed acyclic
 graphs”](https://arxiv.org/abs/2405.15167).
 
@@ -79,8 +79,8 @@ x̂ = model[1](x_new')'
 ```
 
     5×5 adjoint(::Matrix{Float32}) with eltype Float32:
-      0.0634377  -0.00308696  0.23294   -0.0675012  0.0
-     -0.36269    -0.160028    0.673798   0.0503829  0.0
-      0.191729   -0.0644585   0.423387  -0.0134916  0.0
-      0.27577    -0.104044    0.685354  -0.0163412  0.0
-     -0.409075   -0.346833    0.573067   0.0475403  0.0
+      0.265896   -0.092639  1.11583   -0.0745545  0.0
+     -0.371186   -0.480474  0.431186   0.0556441  0.0
+      0.285064   -0.09918   1.33071   -0.0041039  0.0
+      0.247853   -0.105833  1.65873    0.0199266  0.0
+     -0.0514972  -0.342665  0.616304  -0.0116134  0.0

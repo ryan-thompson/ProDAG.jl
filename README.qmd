@@ -5,7 +5,7 @@ engine: julia
 
 # ProDAG
 
-Julia implementation of ProDAG from the paper ["ProDAG: Projected variational inference for directed acyclic graphs"](https://arxiv.org/abs/2405.15167).
+Julia implementation of ProDAG from the NeurIPS 2025 paper ["ProDAG: Projected variational inference for directed acyclic graphs"](https://arxiv.org/abs/2405.15167).
 
 ## Installation
 
@@ -56,5 +56,4 @@ w, model = sample(fit, n_sample = 3)
 # The vector called "model" contains acyclic MLPs drawn from the posterior
 x_new = randn(Float32, 5, p)
 x̂ = model[1](x_new')'
-
 ```

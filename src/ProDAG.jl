@@ -42,28 +42,28 @@ for (fname1, fname2, elty) in
             n = size(A[1], 1)
             lda = max(1, stride(A[1], 2))
             ldc = max(1, stride(C[1], 2))
-            Aptrs = CUDA.CUBLAS.unsafe_batch(A)
-            Cptrs = CUDA.CUBLAS.unsafe_batch(C)
+            Aptrs = CUDA.cuBLAS.unsafe_batch(A)
+            Cptrs = CUDA.cuBLAS.unsafe_batch(C)
             info = CUDA.zeros(Cint, batchSize)
-            CUDA.CUBLAS.$fname1(CUDA.CUBLAS.handle(), n, Aptrs, lda, CUDA.CU_NULL, info, batchSize)
-            CUDA.CUBLAS.$fname2(CUDA.CUBLAS.handle(), n, Aptrs, lda, CUDA.CU_NULL, Cptrs, ldc, info,
+            CUDA.cuBLAS.$fname1(CUDA.cuBLAS.handle(), n, Aptrs, lda, CUDA.CU_NULL, info, batchSize)
+            CUDA.cuBLAS.$fname2(CUDA.cuBLAS.handle(), n, Aptrs, lda, CUDA.CU_NULL, Cptrs, ldc, info,
                 batchSize)
-            CUDA.CUBLAS.unsafe_free!(Aptrs)
-            CUDA.CUBLAS.unsafe_free!(Cptrs)
+            CUDA.cuBLAS.unsafe_free!(Aptrs)
+            CUDA.cuBLAS.unsafe_free!(Cptrs)
         end
     end
 end
 
 function xw_mult(w; x = x)
     x_view = view(reshape(x, size(x, 1), size(x, 2), 1), :, :, :)
-    CUDA.CUBLAS.gemm_strided_batched('N', 'N', 1, x_view, w)
+    CUDA.cuBLAS.gemm_strided_batched('N', 'N', 1, x_view, w)
 end
 
 function Zygote.rrule(::typeof(xw_mult), w; x = x)
     y = xw_mult(w; x = x)
     function y_pullback(dy)
         x_view = view(reshape(x, size(x, 1), size(x, 2), 1), :, :, :)
-        dw = CUDA.CUBLAS.gemm_strided_batched('T', 'N', 1.0, x_view, dy)
+        dw = CUDA.cuBLAS.gemm_strided_batched('T', 'N', 1.0, x_view, dy)
         (Zygote.NoTangent(), dw)
     end
     y, y_pullback
@@ -154,7 +154,7 @@ function project_l1(w, λ)
     w_abs = abs.(w)
     w_sort = sort(w_abs, rev = true, dims = 1)
     csum = cumsum(w_sort, dims = 1)
-    indices = Flux.gpu(collect(1:dims[1] * dims[2]))
+    indices = CUDA.cu(collect(1:dims[1] * dims[2]))
     max_j = vec(maximum((w_sort .* indices .> csum .- reshape(λ, 1, dims[3])) .* indices, dims = 1))
     theta = max.((csum[CartesianIndex.(max_j, 1:dims[3])] .- λ) ./ max_j, 0.0f0)
     w_abs = max.(w_abs .- transpose(theta), 0.0f0)
@@ -236,9 +236,9 @@ Zygote.@adjoint CUDA.randn(args...) = CUDA.randn(args...), Δ -> (nothing,)
 function train_linear!(x, μ, cont_σ, cont_α, prior_μ, prior_σ, prior_α, dirac_λ, noise_var, 
     epoch_max, patience, optimiser, optimiser_args, params, n_sample, verbose)
 
-    # Instantiate optimiser and collect variational parameters
-    optim = optimiser(optimiser_args...)
-    vp = Flux.params(μ, cont_σ, cont_α)
+    # Instantiate optimiser state for the variational parameters
+    vp = (μ, cont_σ, cont_α)
+    optim = Flux.setup(optimiser(optimiser_args...), vp)
 
     # Set convergence criterion
     converge = early_stopping(x -> x, patience, init_score = Inf)
@@ -285,7 +285,7 @@ function train_linear!(x, μ, cont_σ, cont_α, prior_μ, prior_σ, prior_α, di
     for epoch in 1:epoch_max
 
         # Record negative ELBO and gradients
-        neg_elbo, grad = Flux.withgradient(() -> objective(μ, cont_σ, cont_α), vp)
+        neg_elbo, grad = Flux.withgradient(objective, vp...)
 
         # Check for convergence
         converge(neg_elbo) && break
@@ -308,9 +308,9 @@ function train_mlp!(x, construct, μ, cont_σ, cont_α, prior_μ, prior_σ, prio
     epoch_max, patience, optimiser, optimiser_args, params, n_sample, verbose, non_fhl_ind, 
     fhl_ind, ind_order, ind_mat)
 
-    # Instantiate optimiser and collect variational parameters
-    optim = optimiser(optimiser_args...)
-    vp = Flux.params(μ, cont_σ, cont_α)
+    # Instantiate optimiser state for the variational parameters
+    vp = (μ, cont_σ, cont_α)
+    optim = Flux.setup(optimiser(optimiser_args...), vp)
 
     # Set convergence criterion
     converge = early_stopping(x -> x, patience, init_score = Inf)
@@ -365,7 +365,7 @@ function train_mlp!(x, construct, μ, cont_σ, cont_α, prior_μ, prior_σ, prio
     for epoch in 1:epoch_max
 
         # Record negative ELBO and gradients
-        neg_elbo, grad = Flux.withgradient(() -> objective(μ, cont_σ, cont_α), vp)
+        neg_elbo, grad = Flux.withgradient(objective, vp...)
 
         # Check for convergence
         converge(neg_elbo) && break
@@ -511,14 +511,14 @@ function fit_linear(x; prior_μ = 0.0, prior_σ = 1.0, prior_α = Inf, init_μ =
     cont_α = log.(exp.(α) .- 1)
 
     # Move data and parameters to GPU
-    x = Flux.gpu(x)
-    prior_μ = Flux.gpu(prior_μ)
-    prior_σ = Flux.gpu(prior_σ)
-    prior_α = Flux.gpu(prior_α)
-    μ = Flux.gpu(μ)
-    cont_σ = Flux.gpu(cont_σ)
-    cont_α = Flux.gpu(cont_α)
-    noise_var = Flux.gpu(noise_var)
+    x = CUDA.cu(x)
+    prior_μ = CUDA.cu(prior_μ)
+    prior_σ = CUDA.cu(prior_σ)
+    prior_α = CUDA.cu(prior_α)
+    μ = CUDA.cu(μ)
+    cont_σ = CUDA.cu(cont_σ)
+    cont_α = CUDA.cu(cont_α)
+    noise_var = CUDA.cu(noise_var)
 
     # Train the variational posterior
     train_linear!(x, μ, cont_σ, cont_α, prior_μ, prior_σ, prior_α, dirac_λ, noise_var, epoch_max, 
@@ -602,15 +602,15 @@ function fit_mlp(x; hidden_layers = [10], activation_fun = Flux.relu, bias = tru
 
     # Move data and parameters to GPU
     x = transpose(x)
-    x = Flux.gpu(x)
-    prior_μ = Flux.gpu(prior_μ)
-    prior_σ = Flux.gpu(prior_σ)
-    prior_α = Flux.gpu(prior_α)
-    μ = Flux.gpu(μ)
-    cont_σ = Flux.gpu(cont_σ)
-    cont_α = Flux.gpu(cont_α)
-    noise_var = Flux.gpu(noise_var)
-    ind_mat = Flux.gpu(ind_mat)
+    x = CUDA.cu(x)
+    prior_μ = CUDA.cu(prior_μ)
+    prior_σ = CUDA.cu(prior_σ)
+    prior_α = CUDA.cu(prior_α)
+    μ = CUDA.cu(μ)
+    cont_σ = CUDA.cu(cont_σ)
+    cont_α = CUDA.cu(cont_α)
+    noise_var = CUDA.cu(noise_var)
+    ind_mat = CUDA.cu(ind_mat)
 
     # Train the variational posterior
     train_mlp!(x, construct, μ, cont_σ, cont_α, prior_μ, prior_σ, prior_α, dirac_λ, noise_var, 
@@ -663,9 +663,9 @@ function sample(fit::ProDAGLinearFit; n_sample = 100, guarantee_dag = true,
     params = (1, 1, 0.5, 1e-4, 10, 10000, 0.1, 1 / fit.p))
     
     # Move variational parameters to GPU
-    μ = Flux.gpu(fit.μ)
-    σ = Flux.gpu(fit.σ)
-    α = Flux.gpu(fit.α)
+    μ = CUDA.cu(fit.μ)
+    σ = CUDA.cu(fit.σ)
+    α = CUDA.cu(fit.α)
 
     # Sample sparsity parameters
     if fit.dirac_λ
@@ -698,10 +698,10 @@ function sample(fit::ProDAGMLPFit; n_sample = 100, guarantee_dag = true,
     params = (1, 1, 0.5, 1e-4, 10, 10000, 0.1, 0.25 / fit.p))
 
     # Move variational parameters to GPU
-    μ = Flux.gpu(fit.μ)
-    σ = Flux.gpu(fit.σ)
-    α = Flux.gpu(fit.α)
-    ind_mat = Flux.gpu(fit.ind_mat)
+    μ = CUDA.cu(fit.μ)
+    σ = CUDA.cu(fit.σ)
+    α = CUDA.cu(fit.α)
+    ind_mat = CUDA.cu(fit.ind_mat)
 
     # Sample sparsity parameters
     if fit.dirac_λ
@@ -722,7 +722,7 @@ function sample(fit::ProDAGMLPFit; n_sample = 100, guarantee_dag = true,
     if guarantee_dag
         w = Flux.cpu(w)
         guarantee_dag!(w)
-        w = Flux.gpu(w)
+        w = CUDA.cu(w)
     end
 
     scale_factor = transpose(ind_mat) * reshape(w ./ w̃, fit.p * fit.p, n_sample)
