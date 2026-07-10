@@ -5,7 +5,7 @@ engine: julia
 
 # ProDAG
 
-Julia implementation of ProDAG from the NeurIPS 2025 paper ["ProDAG: Projected variational inference for directed acyclic graphs"](https://arxiv.org/abs/2405.15167).
+Julia implementation of ProDAG from the NeurIPS 2025 paper ["ProDAG: Projected variational inference for directed acyclic graphs"](https://proceedings.neurips.cc/paper_files/paper/2025/hash/ee42c13f231836e914930925f950fc62-Abstract-Conference.html).
 
 ## Installation
 

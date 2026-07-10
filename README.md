@@ -4,7 +4,7 @@
 
 Julia implementation of ProDAG from the NeurIPS 2025 paper [“ProDAG:
 Projected variational inference for directed acyclic
-graphs”](https://arxiv.org/abs/2405.15167).
+graphs”](https://proceedings.neurips.cc/paper_files/paper/2025/hash/ee42c13f231836e914930925f950fc62-Abstract-Conference.html).
 
 ## Installation
 
@@ -37,6 +37,16 @@ fit = fit_linear(x, prior_μ = 0, prior_σ = 1, verbose = false)
 # Draw a sample of DAGs from the posterior
 w = sample(fit, n_sample = 3)
 ```
+
+    Precompiling packages...
+       6416.5 ms  ✓ ProDAG
+      1 dependency successfully precompiled in 7 seconds. 199 already precompiled.
+    Precompiling packages...
+       1585.7 ms  ✓ QuartoNotebookWorkerTablesExt (serial)
+      1 dependency successfully precompiled in 2 seconds
+    Precompiling packages...
+        806.7 ms  ✓ QuartoNotebookWorkerLaTeXStringsExt (serial)
+      1 dependency successfully precompiled in 1 seconds
 
     5×5×3 Array{Float32, 3}:
     [:, :, 1] =
